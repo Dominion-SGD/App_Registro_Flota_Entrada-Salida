@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:mysql_client/mysql_client.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SyncResult {
@@ -12,20 +12,10 @@ class SyncResult {
 class OfflineQueueService {
   static const _prefKey = 'offline_registro_queue';
 
-  static Future<MySQLConnection> _abrirConexion() async {
-    final conn = await MySQLConnection.createConnection(
-      host: dotenv.env['DB_HOST'] ?? '161.132.128.4',
-      port: int.parse(dotenv.env['DB_PORT'] ?? '3306'),
-      userName: dotenv.env['DB_USER'] ?? 'root',
-      password: dotenv.env['DB_PASS'] ?? '',
-      databaseName: dotenv.env['DB_NAME'] ?? 'dominion_gpd_energia',
-      secure: true,
-    );
-    await conn.connect().timeout(const Duration(seconds: 8));
-    return conn;
-  }
+  static String get _apiBase =>
+      dotenv.env['API_BASE_URL'] ?? 'http://161.132.128.4:3000/api';
 
-  /// Guarda un registro en la cola local de SharedPreferences.
+  /// Guarda un registro en la cola local (SharedPreferences).
   static Future<void> encolar(Map<String, dynamic> registro) async {
     final prefs = await SharedPreferences.getInstance();
     final lista = prefs.getStringList(_prefKey) ?? [];
@@ -47,64 +37,35 @@ class OfflineQueueService {
         .toList();
   }
 
-  /// Intenta insertar todos los registros pendientes en la BD.
-  /// Los que se insertan correctamente se eliminan de la cola.
-  /// Los que fallan se conservan para el próximo intento.
+  /// Envía cada registro pendiente al endpoint /mobile/guardar_registro.
+  /// Los que el servidor acepta se eliminan de la cola; los que fallan se conservan.
   static Future<SyncResult> sincronizar() async {
     final pendientes = await _obtenerTodos();
     if (pendientes.isEmpty) {
       return const SyncResult(sincronizados: 0, fallidos: 0);
     }
 
-    MySQLConnection? conn;
     int ok = 0;
     final restantes = <String>[];
+    final uri = Uri.parse('$_apiBase/mobile/guardar_registro');
+    const headers = {'Content-Type': 'application/json'};
 
-    try {
-      conn = await _abrirConexion();
-
-      for (final reg in pendientes) {
-        try {
-          await conn.execute('''
-            INSERT INTO registros_vehiculos
-              (placa, dni_conductor, nombre_conductor, cargo_conductor,
-               area_conductor, dni_autoriza, nombre_autoriza, BASE,
-               base_origen, Base_Dirigida, km_actual, tipo, observacion,
-               destino, usuario_id, empresa, fecha)
-            VALUES
-              (:placa, :dni, :nombre, :cargo,
-               :area, :dni_autoriza, :nombre_autoriza, :BASE,
-               :base_origen, :Base_Dirigida, :km, :tipo, :obs,
-               :destino, :usuario_id, :empresa, :fecha)
-          ''', {
-            'placa':           reg['placa'],
-            'dni':             reg['dni'],
-            'nombre':          reg['nombre'],
-            'cargo':           reg['cargo'],
-            'area':            reg['area'],
-            'dni_autoriza':    reg['dni_autoriza'],
-            'nombre_autoriza': reg['nombre_autoriza'],
-            'BASE':            reg['BASE'],
-            'base_origen':     reg['base_origen'],
-            'Base_Dirigida':   reg['Base_Dirigida'],
-            'km':              reg['km'],
-            'tipo':            reg['tipo'],
-            'obs':             reg['obs'],
-            'destino':         reg['destino'],
-            'usuario_id':      reg['usuario_id'],
-            'empresa':         reg['empresa'],
-            'fecha':           reg['fecha'],
-          });
-          ok++;
-        } catch (_) {
-          restantes.add(jsonEncode(reg));
+    for (final reg in pendientes) {
+      try {
+        final resp = await http
+            .post(uri, headers: headers, body: jsonEncode(reg))
+            .timeout(const Duration(seconds: 10));
+        if (resp.statusCode == 200) {
+          final body = jsonDecode(utf8.decode(resp.bodyBytes));
+          if (body is Map && body['success'] == true) {
+            ok++;
+            continue;
+          }
         }
+        restantes.add(jsonEncode(reg));
+      } catch (_) {
+        restantes.add(jsonEncode(reg));
       }
-    } catch (_) {
-      // Sin conexión: conservar toda la cola
-      return SyncResult(sincronizados: 0, fallidos: pendientes.length);
-    } finally {
-      await conn?.close();
     }
 
     final prefs = await SharedPreferences.getInstance();

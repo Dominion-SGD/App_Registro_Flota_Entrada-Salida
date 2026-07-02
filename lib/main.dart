@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
 import 'screens/auth/login_screen.dart';
@@ -64,7 +65,7 @@ class _SplashRouterState extends State<_SplashRouter> {
   @override
   void initState() {
     super.initState();
-    _verificar();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _verificar());
   }
 
   Future<void> _verificar() async {
@@ -79,24 +80,29 @@ class _SplashRouterState extends State<_SplashRouter> {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    return Scaffold(
       backgroundColor: AppColors.primary,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.directions_car_rounded, size: 70, color: Colors.white),
-            SizedBox(height: 16),
+            SvgPicture.asset(
+              'assets/images/logo.svg',
+              width: 140,
+              height: 140,
+              fit: BoxFit.contain,
+            ),
+            const SizedBox(height: 16),
             Text(
               AppStrings.appName,
-              style: TextStyle(
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            SizedBox(height: 32),
-            CircularProgressIndicator(color: Colors.white70, strokeWidth: 2),
+            const SizedBox(height: 32),
+            const CircularProgressIndicator(color: Colors.white70, strokeWidth: 2),
           ],
         ),
       ),
