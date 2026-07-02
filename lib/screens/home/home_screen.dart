@@ -458,22 +458,24 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
 
-      // ── 4. Inspección — solo flota Dominion (flota_maestro) ────────────────
-      if (tipoDetectado == 'Salida' && !_bloqueado) {
-        final resFlota = await conn.execute(
-          'SELECT 1 FROM flota_maestro WHERE placa = :p_con OR placa = :p_sin LIMIT 1',
-          {'p_con': placaConGuion, 'p_sin': placaSinGuion},
-        );
-        if (resFlota.rows.isNotEmpty) {
-          final insp = await _verificarInspeccion(conn, placaSinGuion);
-          if (insp != null && mounted) {
-            setState(() {
-              _bloqueado      = insp['bloquea'] as bool? ?? false;
-              _bloqueoMensaje = insp['mensaje'] as String?;
-            });
-          }
-        }
-      }
+      // ── 4. Inspección — DESHABILITADA TEMPORALMENTE ─────────────────────────
+      // Se reactiva cuando los checklists estén listos (firma conductor + firma
+      // supervisor CAPA). Por ahora los vehículos pueden entrar/salir libremente.
+      // if (tipoDetectado == 'Salida' && !_bloqueado) {
+      //   final resFlota = await conn.execute(
+      //     'SELECT 1 FROM flota_maestro WHERE placa = :p_con OR placa = :p_sin LIMIT 1',
+      //     {'p_con': placaConGuion, 'p_sin': placaSinGuion},
+      //   );
+      //   if (resFlota.rows.isNotEmpty) {
+      //     final insp = await _verificarInspeccion(conn, placaSinGuion);
+      //     if (insp != null && mounted) {
+      //       setState(() {
+      //         _bloqueado      = insp['bloquea'] as bool? ?? false;
+      //         _bloqueoMensaje = insp['mensaje'] as String?;
+      //       });
+      //     }
+      //   }
+      // }
 
     } catch (e) {
       debugPrint('❌ _procesarPlacaCompleta: $e');
@@ -604,6 +606,7 @@ class _HomeScreenState extends State<HomeScreen> {
         .join('\n    OR ');
   }
 
+  // ignore: unused_element
   Future<Map<String, dynamic>?> _verificarInspeccion(
     MySQLConnection conn, String placaSinGuion,
   ) async {
